@@ -2,13 +2,29 @@
 
 ## Getting Started
 
-1. Fork the repository
-2. Clone your fork
-3. Install the pinned tool versions from `.tool-versions`: `asdf install` (or `mise install`)
+1. Fork the repository and clone your fork
+2. Install the pinned tools from `.tool-versions`: `mise install` (or `asdf install`)
+3. Build and test:
+   ```sh
+   cmake --preset default
+   cmake --build --preset default
+   ctest --preset default
+   ```
 4. Create a branch: `git checkout -b feat/your-feature-name`
-4. Make your changes
-5. Commit using [conventional commits](#commit-style)
-6. Push and open a Pull Request
+5. Make your changes, keeping the build warning-free and adding tests
+6. Commit using [conventional commits](#commit-style)
+7. Push and open a Pull Request
+
+### Contributing a pedal
+
+Example pedals live in `pedals/examples/` and are bundled into the plugin. Validate yours with
+`open-pedal-render --check path/to/pedal.json` and make sure `ctest` still passes: the
+`ExamplePedalTests` suite runs every bundled pedal through silence, a sine, and every knob extreme.
+
+### Contributing a DSP block
+
+See "Adding a block" in `AGENTS.md`. Every block parameter needs a one-line `doc`; the block
+reference in `docs/PEDAL_FORMAT.md` is generated from it.
 
 ## Branch Naming
 
@@ -37,7 +53,7 @@ Types: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `perf`, `ci`
 Examples:
 - `feat(auth): add OAuth2 login support`
 - `fix(api): correct response status code for 404`
-- `chore(deps): update go.mod dependencies`
+- `chore(deps): bump JUCE to 9.0.3`
 
 ## Versioning
 
