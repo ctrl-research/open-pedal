@@ -37,7 +37,7 @@ void Chain::reset()
 void Chain::setInputGainDb(double db)
 {
     inputGainDb_ = db;
-    inputGainLinear_ = static_cast<float>(std::pow(10.0, db / 20.0));
+    inputGainLinear_.store(static_cast<float>(std::pow(10.0, db / 20.0)), std::memory_order_relaxed);
 }
 
 void Chain::setEnabled(int slotIndex, bool enabled)
@@ -68,9 +68,10 @@ void Chain::process(float* buffer, int numSamples)
     if (numSamples <= 0)
         return;
 
-    if (inputGainLinear_ != 1.0f)
+    const float gain = inputGainLinear_.load(std::memory_order_relaxed);
+    if (gain != 1.0f)
         for (int i = 0; i < numSamples; ++i)
-            buffer[i] *= inputGainLinear_;
+            buffer[i] *= gain;
 
     for (auto& s : slots_) {
         if (!s.pedal)

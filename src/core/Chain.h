@@ -2,6 +2,7 @@
 
 #include "core/Pedal.h"
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,7 +55,7 @@ private:
     std::vector<float> scratch_; // used for tail rendering (pedal on silence)
     double sampleRate_ = 44100.0;
     double inputGainDb_ = 0.0;
-    float inputGainLinear_ = 1.0f;
+    std::atomic<float> inputGainLinear_{1.0f};
 };
 
 } // namespace openpedal

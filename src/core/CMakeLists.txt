@@ -32,6 +32,5 @@ target_link_libraries(openpedal_core INTERFACE
 target_compile_definitions(openpedal_core INTERFACE
   JUCE_WEB_BROWSER=0
   JUCE_USE_CURL=0
-  JUCE_DISPLAY_SPLASH_SCREEN=0
   JUCE_MODAL_LOOPS_PERMITTED=0
 )

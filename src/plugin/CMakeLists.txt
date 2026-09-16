@@ -15,9 +15,17 @@ juce_add_plugin(OpenPedal
   VST3_AUTO_MANIFEST FALSE
 )
 
+# Example pedals ship inside the binary and are copied to the user's pedal folder on first run.
+file(GLOB OPENPEDAL_BUNDLED_PEDALS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/pedals/examples/*.json)
+juce_add_binary_data(OpenPedalBundledPedals
+  HEADER_NAME BundledPedals.h
+  NAMESPACE BundledPedals
+  SOURCES ${OPENPEDAL_BUNDLED_PEDALS})
+
 target_sources(OpenPedal PRIVATE
   PluginProcessor.cpp
   PluginEditor.cpp
+  SlotParameter.cpp
 )
 
 target_compile_definitions(OpenPedal PUBLIC
@@ -28,8 +36,10 @@ target_compile_definitions(OpenPedal PUBLIC
 target_link_libraries(OpenPedal
   PRIVATE
     openpedal_core
+    OpenPedalBundledPedals
     juce::juce_audio_utils
     juce::juce_audio_processors
+    juce::juce_gui_extra
     juce::juce_dsp
   PUBLIC
     juce::juce_recommended_config_flags
