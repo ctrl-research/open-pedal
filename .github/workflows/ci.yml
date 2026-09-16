@@ -2,34 +2,91 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
 
+env:
+  PLUGINVAL_VERSION: v1.0.4
+
 jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libjack-jackd2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev \
+            libxi-dev libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
+
+      - name: Install pinned tools (cmake, ninja)
+        uses: jdx/mise-action@v2
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/ci/_deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake') }}
+
+      - name: Configure
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ci
+
+      - name: Unit tests
+        run: ctest --preset ci
+
+      - name: Validate example pedals
+        run: build/ci/src/cli/open-pedal-render_artefacts/Release/open-pedal-render --check pedals/examples/*.json
+
+      - name: Render the starter board
+        run: |
+          python3 - <<'PY'
+          import wave, struct, math
+          sr = 48000
+          with wave.open('tone.wav', 'w') as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+              w.writeframes(b''.join(struct.pack('<h', int(0.3 * math.sin(2 * math.pi * 196 * i / sr) * 32767)) for i in range(sr)))
+          PY
+          build/ci/src/cli/open-pedal-render_artefacts/Release/open-pedal-render \
+            boards/examples/starter.json tone.wav out.wav --pedals pedals/examples --no-user-pedals
+
+      - name: pluginval
+        if: runner.os == 'macOS'
+        run: |
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --timeout-ms 300000 \
+            --validate build/ci/src/plugin/OpenPedal_artefacts/Release/VST3/OpenPedal.vst3
+
+      - name: Upload plugin
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenPedal-${{ runner.os }}-vst3
+          path: build/ci/src/plugin/OpenPedal_artefacts/Release/VST3/OpenPedal.vst3
+
   validate:
+    name: repo hygiene
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Check for sensitive files
         run: |
-          # Fail if .env, secrets, or private keys are committed
-          if git grep -l "\.env\|PRIVATE_KEY\|AWS_SECRET" --cached 2>/dev/null; then
-            echo "Error: sensitive files committed"
-            exit 1
+          if git grep -l "PRIVATE_KEY\|AWS_SECRET" --cached -- ':!.github/workflows/ci.yml' 2>/dev/null; then
+            echo "Error: sensitive content committed"; exit 1
           fi
-
-      - name: Validate YAML files
+      - name: Validate JSON files
         run: |
-          for f in $(find . -name "*.yaml" -o -name "*.yml" 2>/dev/null | grep -v node_modules); do
-            python3 -c "import yaml, sys; yaml.safe_load(open('$f'))" 2>/dev/null || echo "Invalid YAML: $f"
-          done
-
-      # Add project-specific validation steps below, e.g.:
-      # - name: Run tests
-      #   run: go test ./...
-      #
-      # - name: Build Docker image
-      #   run: docker build .
+          set -e
+          for f in $(git ls-files '*.json'); do python3 -c "import json,sys; json.load(open('$f'))" || { echo "Invalid JSON: $f"; exit 1; }; done

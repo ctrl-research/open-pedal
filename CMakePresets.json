@@ -1,0 +1,43 @@
+{
+  "version": 8,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default (Ninja, RelWithDebInfo)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "OPENPEDAL_COPY_PLUGIN": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug (Ninja)",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "ci",
+      "displayName": "CI (Ninja, Release, no plugin copy)",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/ci",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "OPENPEDAL_COPY_PLUGIN": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default" },
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "ci", "configurePreset": "ci" }
+  ],
+  "testPresets": [
+    { "name": "default", "configurePreset": "default", "output": { "outputOnFailure": true } },
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true } },
+    { "name": "ci", "configurePreset": "ci", "output": { "outputOnFailure": true } }
+  ]
+}

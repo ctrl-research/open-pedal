@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "openpedal.ts-drive",
+  "name": "TS Drive",
+  "version": "1.0.0",
+  "category": "drive",
+  "author": "OpenPedal",
+  "description": "Tube Screamer style overdrive: mid-focused clipping blended with the clean signal, then a low-pass tone control.",
+  "oversampling": 4,
+  "knobs": [
+    { "id": "drive", "name": "Drive", "type": "float", "min": 1, "max": 100, "default": 20, "taper": "log" },
+    { "id": "tone", "name": "Tone", "type": "float", "min": 500, "max": 6000, "default": 1800, "unit": "Hz", "taper": "log" },
+    { "id": "level", "name": "Level", "type": "float", "min": -24, "max": 12, "default": -6, "unit": "dB" },
+    { "id": "clip", "name": "Clipping", "type": "enum", "values": ["Smooth", "Gritty"], "default": "Smooth" }
+  ],
+  "nodes": [
+    { "id": "hpf", "type": "filter", "mode": "highpass", "cutoff": 720, "q": 0.7 },
+    { "id": "pre", "type": "gain", "gain": { "knob": "drive" } },
+    { "id": "clipper", "type": "waveshaper", "shape": { "knob": "clip", "map": { "Smooth": "tanh", "Gritty": "asymmetric" } }, "bias": 0.05 },
+    { "id": "dc", "type": "dc_block" },
+    { "id": "clean", "type": "gain", "gain": 0.5 },
+    { "id": "tone", "type": "filter", "mode": "lowpass", "cutoff": { "knob": "tone" }, "q": 0.6 },
+    { "id": "out", "type": "gain", "gain_db": { "knob": "level" } }
+  ],
+  "connections": [
+    ["in", "hpf"],
+    ["hpf", "pre"],
+    ["pre", "clipper"],
+    ["clipper", "dc"],
+    ["dc", "tone"],
+    ["in", "clean"],
+    ["clean", "tone"],
+    ["tone", "out"],
+    ["out", "output"]
+  ]
+}

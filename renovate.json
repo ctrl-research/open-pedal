@@ -11,9 +11,8 @@
   "prHourlyLimit": 2,
   "enabledManagers": [
     "asdf",
-    "docker-compose",
     "github-actions",
-    "gomod"
+    "custom.regex"
   ],
   "packageRules": [
     {
@@ -33,20 +32,19 @@
       ]
     },
     {
-      "matchDatasources": [
-        "docker"
+      "matchManagers": [
+        "custom.regex"
       ],
-      "commitMessageTopic": "docker {{depName}}",
+      "commitMessageTopic": "dependency {{depName}}",
       "matchUpdateTypes": [
         "major",
         "minor",
         "patch"
       ],
       "semanticCommitType": "chore",
-      "semanticCommitScope": "docker",
-      "bumpVersion": "patch",
+      "semanticCommitScope": "deps",
       "addLabels": [
-        "docker"
+        "deps"
       ]
     },
     {
@@ -63,22 +61,6 @@
       "semanticCommitScope": "ci",
       "addLabels": [
         "ci"
-      ]
-    },
-    {
-      "matchDatasources": [
-        "gomod"
-      ],
-      "commitMessageTopic": "go module {{depName}}",
-      "matchUpdateTypes": [
-        "major",
-        "minor",
-        "patch"
-      ],
-      "semanticCommitType": "chore",
-      "semanticCommitScope": "deps",
-      "addLabels": [
-        "go"
       ]
     },
     {
@@ -108,5 +90,30 @@
   ],
   "labels": [
     "renovate"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "CMake FetchContent pins in cmake/Dependencies.cmake",
+      "managerFilePatterns": [
+        "/^cmake/Dependencies\\.cmake$/"
+      ],
+      "matchStrings": [
+        "GIT_TAG\\s+(?<currentValue>\\S+)\\s+# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "pluginval release used in CI",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "PLUGINVAL_VERSION:\\s+(?<currentValue>\\S+)"
+      ],
+      "depNameTemplate": "Tracktion/pluginval",
+      "datasourceTemplate": "github-releases"
+    }
   ]
 }
