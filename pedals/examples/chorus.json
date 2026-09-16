@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "openpedal.chorus",
+  "name": "Chorus",
+  "version": "1.0.0",
+  "category": "modulation",
+  "author": "OpenPedal",
+  "description": "Classic single-voice chorus: a short delay swept by an LFO, blended with the dry signal.",
+  "knobs": [
+    { "id": "rate", "name": "Rate", "type": "float", "min": 0.1, "max": 5, "default": 0.8, "unit": "Hz", "taper": "log" },
+    { "id": "depth", "name": "Depth", "type": "float", "min": 0, "max": 5, "default": 2, "unit": "ms" },
+    { "id": "mix", "name": "Mix", "type": "float", "min": 0, "max": 1, "default": 0.5, "taper": "audio" }
+  ],
+  "nodes": [
+    { "id": "lfo", "type": "lfo", "shape": "sine", "rate_hz": { "knob": "rate" }, "depth": { "knob": "depth" } },
+    { "id": "dly", "type": "delay", "time_ms": 7, "max_ms": 40, "interpolation": "cubic" },
+    { "id": "blend", "type": "mix", "mix": { "knob": "mix" } }
+  ],
+  "connections": [
+    ["in", "dly"],
+    ["lfo", "dly.mod"],
+    ["in", "blend.a"],
+    ["dly", "blend.b"],
+    ["blend", "output"]
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "openpedal.clean-boost",
+  "name": "Clean Boost",
+  "version": "1.0.0",
+  "category": "utility",
+  "author": "OpenPedal",
+  "description": "Transparent gain with a gentle low cut to keep the bottom end tight.",
+  "knobs": [
+    { "id": "boost", "name": "Boost", "type": "float", "min": 0, "max": 24, "default": 6, "unit": "dB" },
+    { "id": "low_cut", "name": "Low Cut", "type": "float", "min": 20, "max": 300, "default": 40, "unit": "Hz", "taper": "log" }
+  ],
+  "nodes": [
+    { "id": "hpf", "type": "filter", "mode": "highpass", "cutoff": { "knob": "low_cut" }, "q": 0.707 },
+    { "id": "amp", "type": "gain", "gain_db": { "knob": "boost" } }
+  ],
+  "connections": [
+    ["in", "hpf"],
+    ["hpf", "amp"],
+    ["amp", "output"]
+  ]
+}

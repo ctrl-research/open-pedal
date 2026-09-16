@@ -63,3 +63,18 @@ venv/
 *.tmp
 *.temp
 .cache/
+
+# CMake / C++
+build/
+CMakeUserPresets.json
+compile_commands.json
+.cache/
+*.o
+*.a
+*.vst3/
+*.component/
+*.clap/
+
+# JUCE
+JuceLibraryCode/
+*.jucer.bak
