@@ -17,7 +17,19 @@ boards/examples/starter.json      a board: which pedals, in what order, with wha
 
 Early. VST3 on macOS is the tested target; Linux builds in CI. AU and CLAP are planned.
 
-## Quick start
+## Install a release
+
+Grab the latest archive from the [Releases page](../../releases). macOS builds are universal
+VST3 bundles but not yet notarized, so after copying `OpenPedal.vst3` into
+`~/Library/Audio/Plug-Ins/VST3/` clear the quarantine flag once:
+
+```sh
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/OpenPedal.vst3
+```
+
+Linux builds go in `~/.vst3/`. Rescan plugins in your DAW afterwards.
+
+## Build from source
 
 Requirements: a C++20 compiler (Xcode Command Line Tools on macOS), and
 [mise](https://mise.jdx.dev/) to install the pinned cmake and ninja from `.tool-versions`.
