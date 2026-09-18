@@ -15,9 +15,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -29,7 +36,12 @@ jobs:
             libxi-dev libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
 
       - name: Install pinned tools (cmake, ninja)
+        if: runner.os != 'Windows'
         uses: jdx/mise-action@v2
+
+      - name: Install ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y --no-progress
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -46,8 +58,15 @@ jobs:
       - name: Unit tests
         run: ctest --preset ci
 
+      - name: Locate CLI
+        id: cli
+        run: |
+          CLI=build/ci/src/cli/open-pedal-render_artefacts/Release/open-pedal-render
+          [[ "$RUNNER_OS" == "Windows" ]] && CLI="$CLI.exe"
+          echo "path=$CLI" >> "$GITHUB_OUTPUT"
+
       - name: Validate example pedals
-        run: build/ci/src/cli/open-pedal-render_artefacts/Release/open-pedal-render --check pedals/examples/*.json
+        run: ${{ steps.cli.outputs.path }} --check pedals/examples/*.json
 
       - name: Render the starter board
         run: |
@@ -58,10 +77,10 @@ jobs:
               w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
               w.writeframes(b''.join(struct.pack('<h', int(0.3 * math.sin(2 * math.pi * 196 * i / sr) * 32767)) for i in range(sr)))
           PY
-          build/ci/src/cli/open-pedal-render_artefacts/Release/open-pedal-render \
+          ${{ steps.cli.outputs.path }} \
             boards/examples/starter.json tone.wav out.wav --pedals pedals/examples --no-user-pedals
 
-      - name: pluginval
+      - name: pluginval (macOS)
         if: runner.os == 'macOS'
         run: |
           curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_macOS.zip
@@ -69,8 +88,16 @@ jobs:
           pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --timeout-ms 300000 \
             --validate build/ci/src/plugin/OpenPedal_artefacts/Release/VST3/OpenPedal.vst3
 
+      - name: pluginval (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_Windows.zip
+          unzip -q pluginval.zip
+          ./pluginval.exe --strictness-level 5 --timeout-ms 300000 \
+            --validate build/ci/src/plugin/OpenPedal_artefacts/Release/VST3/OpenPedal.vst3
+
       - name: Upload plugin
-        if: runner.os == 'macOS'
+        if: runner.os != 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: OpenPedal-${{ runner.os }}-vst3

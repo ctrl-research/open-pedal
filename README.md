@@ -15,7 +15,8 @@ boards/examples/starter.json      a board: which pedals, in what order, with wha
 
 ## Status
 
-Early. VST3 on macOS is the tested target; Linux builds in CI. AU and CLAP are planned.
+Early. VST3 on macOS is the tested target; Windows and Linux build and pass pluginval in CI.
+AU and CLAP are planned.
 
 ## Install a release
 
@@ -27,7 +28,8 @@ VST3 bundles but not yet notarized, so after copying `OpenPedal.vst3` into
 xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/OpenPedal.vst3
 ```
 
-Linux builds go in `~/.vst3/`. Rescan plugins in your DAW afterwards.
+Windows builds go in `C:\Program Files\Common Files\VST3\`, Linux builds in `~/.vst3/`.
+Rescan plugins in your DAW afterwards.
 
 ## Build from source
 
@@ -50,6 +52,7 @@ Drop a `.json` file into your pedals folder and the plugin picks it up within a 
 
 - macOS: `~/Music/OpenPedal/pedals`
 - Linux: `~/.local/share/open-pedal/pedals`
+- Windows: `%APPDATA%\OpenPedal\pedals`
 - Any platform: set `OPENPEDAL_PEDALS_DIR`
 
 The folder is seeded with the example pedals on first run. Copy one, change its `id`, and edit.

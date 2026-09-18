@@ -4,7 +4,10 @@
 #include "PluginEditor.h"
 #include "core/Paths.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <fstream>
+#include <functional>
 #include <sstream>
 
 namespace openpedal {
