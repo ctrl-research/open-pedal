@@ -13,12 +13,18 @@ else()
 endif()
 
 # Third-party headers are pulled in as system includes so their code never trips our warnings.
-set(OPENPEDAL_SYSTEM_INCLUDE_FLAGS
-  -isystem ${juce_SOURCE_DIR}/modules
-  -isystem ${nlohmann_json_SOURCE_DIR}/include)
+set(OPENPEDAL_SYSTEM_INCLUDE_DIRS ${juce_SOURCE_DIR}/modules ${nlohmann_json_SOURCE_DIR}/include)
 if(DEFINED catch2_SOURCE_DIR)
-  list(APPEND OPENPEDAL_SYSTEM_INCLUDE_FLAGS -isystem ${catch2_SOURCE_DIR}/src)
+  list(APPEND OPENPEDAL_SYSTEM_INCLUDE_DIRS ${catch2_SOURCE_DIR}/src)
 endif()
+set(OPENPEDAL_SYSTEM_INCLUDE_FLAGS)
+foreach(dir IN LISTS OPENPEDAL_SYSTEM_INCLUDE_DIRS)
+  if(MSVC)
+    list(APPEND OPENPEDAL_SYSTEM_INCLUDE_FLAGS /external:I "${dir}")
+  else()
+    list(APPEND OPENPEDAL_SYSTEM_INCLUDE_FLAGS -isystem "${dir}")
+  endif()
+endforeach()
 
 function(openpedal_apply_warnings target)
   get_target_property(own_sources ${target} SOURCES)

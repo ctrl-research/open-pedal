@@ -27,8 +27,18 @@ jobs:
           - os: ubuntu-latest
             name: Linux
             preset: release
+          - os: windows-latest
+            name: Windows
+            preset: release
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -40,11 +50,15 @@ jobs:
             libxi-dev libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
 
       - name: Install pinned tools (cmake, ninja)
+        if: runner.os != 'Windows'
         uses: jdx/mise-action@v2
+
+      - name: Install ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y --no-progress
 
       - name: Resolve version
         id: version
-        shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -107,6 +121,29 @@ jobs:
           (cd dist && tar czf "OpenPedal-${{ steps.version.outputs.version }}-Linux-x86_64.tar.gz" OpenPedal)
           ls -la dist
 
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -e
+          BUNDLE=build/release/src/plugin/OpenPedal_artefacts/Release/VST3/OpenPedal.vst3
+          CLI=build/release/src/cli/open-pedal-render_artefacts/Release/open-pedal-render.exe
+          mkdir -p dist/OpenPedal
+          cp -R "$BUNDLE" dist/OpenPedal/
+          cp "$CLI" dist/OpenPedal/
+          cp -R pedals boards docs/PEDAL_FORMAT.md docs/BOARD_FORMAT.md dist/OpenPedal/
+          cat > dist/OpenPedal/INSTALL.txt <<'TXT'
+          OpenPedal for Windows (VST3, x64)
+
+          1. Copy the OpenPedal.vst3 folder to C:\Program Files\Common Files\VST3\
+          2. Rescan plugins in your DAW.
+          3. Example pedals are copied to %APPDATA%\OpenPedal\pedals on first run.
+
+          The build is not code-signed; Windows may show a SmartScreen prompt the first time
+          you run open-pedal-render.exe.
+          TXT
+          (cd dist && 7z a -tzip "OpenPedal-${{ steps.version.outputs.version }}-Windows-x64.zip" OpenPedal > /dev/null)
+          ls -la dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: OpenPedal-${{ matrix.name }}
@@ -140,6 +177,8 @@ jobs:
           ```sh
           xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/OpenPedal.vst3
           ```
+
+          **Windows** (x64, VST3): unzip and copy the `OpenPedal.vst3` folder to `C:\Program Files\Common Files\VST3\`.
 
           **Linux** (x86_64, VST3): extract and copy `OpenPedal.vst3` to `~/.vst3/`.
 
