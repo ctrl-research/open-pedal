@@ -1,0 +1,81 @@
+name: Auto release
+
+# Every merge to main publishes a release. The version bump comes from the merged PR's label:
+#   major  -> X+1.0.0
+#   minor  -> X.Y+1.0
+#   patch  -> X.Y.Z+1   (default when no label is present)
+# The tag is created here, then release.yml is called directly, because tags pushed with the
+# workflow token do not trigger tag-based workflows.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Compute and tag version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine bump from merged PR label
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+                     --jq '[.[] | select(.merged_at != null)] | first | .labels[].name' 2>/dev/null || true)
+          echo "PR labels: ${LABELS:-<none>}"
+          BUMP=patch
+          if grep -qx "major" <<< "$LABELS"; then BUMP=major
+          elif grep -qx "minor" <<< "$LABELS"; then BUMP=minor
+          elif grep -qx "patch" <<< "$LABELS"; then BUMP=patch
+          fi
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "Bump: $BUMP"
+
+      - name: Compute next version
+        id: next
+        run: |
+          set -e
+          LATEST=$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          LATEST=${LATEST:-0.0.0}
+          IFS=. read -r MAJ MIN PAT <<< "$LATEST"
+          case "${{ steps.bump.outputs.bump }}" in
+            major) MAJ=$((MAJ+1)); MIN=0; PAT=0 ;;
+            minor) MIN=$((MIN+1)); PAT=0 ;;
+            patch) PAT=$((PAT+1)) ;;
+          esac
+          VERSION="${MAJ}.${MIN}.${PAT}"
+          echo "latest=$LATEST next=$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.next.outputs.version }}" -m "OpenPedal ${{ steps.next.outputs.version }}" "${GITHUB_SHA}"
+          git push origin "${{ steps.next.outputs.version }}"
+
+  release:
+    name: Build and publish
+    needs: bump
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.bump.outputs.version }}
+    permissions:
+      contents: write

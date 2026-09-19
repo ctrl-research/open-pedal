@@ -71,6 +71,10 @@ docs/                ARCHITECTURE.md, PEDAL_FORMAT.md (user-facing block referen
   must keep loading older files.
 - **Warnings.** First-party sources compile with strict warnings (`cmake/Warnings.cmake`); keep
   the build warning-free. JUCE sources are excluded on purpose.
+- **Releases are automatic.** Merging to `main` runs `auto-release.yml`, which bumps from the
+  latest tag according to the PR label (`major`/`minor`/`patch`, default patch), tags, and calls
+  `release.yml`. The binary's version comes from `-DOPENPEDAL_VERSION`; local builds report 0.0.0.
+  Never merge or tag on the maintainer's behalf.
 - Versioning is SemVer as bare `X.Y.Z`. Branches follow `feat|bug|hotfix|release|chore/short-name`,
   commits follow Conventional Commits. Never push directly to `main`; all changes via PR.
 - When adding a language or tool, pin it in `.tool-versions` first.

@@ -66,6 +66,8 @@ Project artifacts (releases, tags, packages, container images) follow [Semantic 
 
 ## Pull Requests
 
+- Label the PR `major`, `minor`, or `patch` to control the version bump when it merges. Unlabeled
+  PRs bump the patch version. Every merge to `main` publishes a release automatically.
 - Fill out the PR template completely
 - Link any related issues
 - Ensure CI passes before requesting review

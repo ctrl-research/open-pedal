@@ -1,10 +1,18 @@
 name: Release
 
 # Builds distributable plugins and attaches them to a GitHub release.
-# Trigger by pushing a bare SemVer tag (e.g. `git tag 0.1.0 && git push origin 0.1.0`),
-# or run manually to produce a pre-release from any ref.
+#
+# Normally invoked by auto-release.yml after a merge to main (label-driven version bump).
+# Also runs when a bare SemVer tag is pushed by hand, or manually to produce build artifacts
+# from any ref without publishing a release.
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to build and publish (X.Y.Z); the tag must already exist"
+        required: true
+        type: string
   push:
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
@@ -60,14 +68,18 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
           else
-            echo "version=0.0.0-dev.$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            VERSION="0.0.0-dev.$(git rev-parse --short HEAD)"
           fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "numeric=${VERSION%%-*}" >> "$GITHUB_OUTPUT"
 
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.preset }} -DOPENPEDAL_VERSION=${{ steps.version.outputs.numeric }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -156,7 +168,7 @@ jobs:
     name: Publish GitHub release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: inputs.version != '' || startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -166,6 +178,7 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           set -e
           ls -la artifacts
@@ -185,7 +198,7 @@ jobs:
           Rescan plugins in your DAW. Example pedals are written to your pedals folder on first run; see `PEDAL_FORMAT.md` in the archive to write your own.
           MD
           )
-          gh release create "${GITHUB_REF_NAME}" artifacts/* \
-            --title "OpenPedal ${GITHUB_REF_NAME}" \
+          gh release create "${VERSION}" artifacts/* \
+            --title "OpenPedal ${VERSION}" \
             --notes "$NOTES" \
             --generate-notes
