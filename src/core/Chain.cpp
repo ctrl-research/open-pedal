@@ -5,12 +5,14 @@
 
 namespace openpedal {
 
-void Chain::addSlot(std::unique_ptr<IPedal> pedal, std::string pedalId, bool enabled)
+void Chain::addSlot(std::unique_ptr<IPedal> pedal, std::string pedalId, bool enabled, int group)
 {
     Slot s;
     s.pedal = std::move(pedal);
     s.pedalId = std::move(pedalId);
     s.enabled = enabled;
+    s.group = (group >= 0 && group < kMaxGroups) ? group : -1;
+    s.wasActive = enabled && (s.group < 0 || groupEnabled_[s.group]);
     slots_.push_back(std::move(s));
 }
 
@@ -22,6 +24,7 @@ void Chain::prepare(double sampleRate, int maxBlockSize)
         if (s.pedal)
             s.pedal->prepare(sampleRate, maxBlockSize);
         s.tailSamplesRemaining = 0;
+        s.wasActive = s.enabled && (s.group < 0 || groupEnabled_[s.group]);
     }
 }
 
@@ -40,18 +43,50 @@ void Chain::setInputGainDb(double db)
     inputGainLinear_.store(static_cast<float>(std::pow(10.0, db / 20.0)), std::memory_order_relaxed);
 }
 
+bool Chain::isActive(int slotIndex) const
+{
+    if (slotIndex < 0 || slotIndex >= numSlots())
+        return false;
+    const auto& s = slots_[static_cast<std::size_t>(slotIndex)];
+    return s.enabled && (s.group < 0 || groupEnabled_[s.group]);
+}
+
+void Chain::refreshSlotState(Slot& s)
+{
+    const bool active = s.enabled && (s.group < 0 || groupEnabled_[s.group]);
+    if (active == s.wasActive)
+        return;
+    s.wasActive = active;
+    if (active) {
+        s.tailSamplesRemaining = 0; // back on: the pedal keeps whatever state it has
+    } else if (s.pedal) {
+        const double tail = s.pedal->descriptor().tailSeconds;
+        s.tailSamplesRemaining = tail > 0.0 ? static_cast<int>(std::ceil(tail * sampleRate_)) : 0;
+    }
+}
+
 void Chain::setEnabled(int slotIndex, bool enabled)
 {
     if (slotIndex < 0 || slotIndex >= numSlots())
         return;
     auto& s = slots_[static_cast<std::size_t>(slotIndex)];
-    if (s.enabled == enabled)
-        return;
     s.enabled = enabled;
-    if (!enabled && s.pedal) {
-        const double tail = s.pedal->descriptor().tailSeconds;
-        s.tailSamplesRemaining = tail > 0.0 ? static_cast<int>(std::ceil(tail * sampleRate_)) : 0;
-    }
+    refreshSlotState(s);
+}
+
+void Chain::setGroupEnabled(int group, bool enabled)
+{
+    if (group < 0 || group >= kMaxGroups)
+        return;
+    groupEnabled_[group] = enabled;
+    for (auto& s : slots_)
+        if (s.group == group)
+            refreshSlotState(s);
+}
+
+bool Chain::groupEnabled(int group) const
+{
+    return group >= 0 && group < kMaxGroups && groupEnabled_[group];
 }
 
 void Chain::setParam(int slotIndex, std::string_view paramId, double realValue)
@@ -77,7 +112,7 @@ void Chain::process(float* buffer, int numSamples)
         if (!s.pedal)
             continue;
 
-        if (s.enabled) {
+        if (s.wasActive) {
             s.pedal->process(buffer, numSamples);
             continue;
         }
@@ -102,7 +137,7 @@ int Chain::latencySamples() const
 {
     int total = 0;
     for (const auto& s : slots_)
-        if (s.pedal && s.enabled)
+        if (s.pedal && s.wasActive)
             total += s.pedal->latencySamples();
     return total;
 }

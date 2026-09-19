@@ -131,3 +131,51 @@ TEST_CASE("latency sums only enabled pedals")
     chain.addSlot(std::make_unique<Latent>(), "b", false);
     CHECK(chain.latencySamples() == 10);
 }
+
+TEST_CASE("group switches gate member pedals and trigger tails")
+{
+    auto tailPedal = std::make_unique<GainPedal>(2.0f, 0.001); // 48 samples of tail at 48k
+    auto* raw = tailPedal.get();
+    raw->tailValue_ = 0.25f;
+
+    Chain chain;
+    chain.addSlot(std::make_unique<GainPedal>(2.0f), "a", true, 0);  // group 0
+    chain.addSlot(std::make_unique<GainPedal>(3.0f), "b", true);     // no group
+    chain.addSlot(std::move(tailPedal), "c", true, 1);               // group 1
+    chain.addSlot(std::make_unique<GainPedal>(5.0f), "d", false, 0); // own switch off
+    chain.prepare(48000, 32);
+
+    CHECK(chain.isActive(0));
+    CHECK(chain.isActive(2));
+    CHECK_FALSE(chain.isActive(3));
+    auto buf = ones(32);
+    chain.process(buf.data(), 32);
+    CHECK_THAT(static_cast<double>(buf[0]), WithinAbs(2.0 * 3.0 * 2.0 + 0.25, 1e-6)); // c adds its constant
+
+    chain.setGroupEnabled(0, false);
+    CHECK_FALSE(chain.isActive(0));
+    CHECK_FALSE(chain.groupEnabled(0));
+    buf = ones(32);
+    chain.process(buf.data(), 32);
+    CHECK_THAT(static_cast<double>(buf[0]), WithinAbs(3.0 * 2.0 + 0.25, 1e-6));
+
+    // Turning group 0 back on does not enable 'd', whose own switch is off.
+    chain.setGroupEnabled(0, true);
+    CHECK(chain.isActive(0));
+    CHECK_FALSE(chain.isActive(3));
+
+    // Group 1 off: 'c' rings out on silence, then resets.
+    chain.setGroupEnabled(1, false);
+    buf = ones(32);
+    chain.process(buf.data(), 32);
+    CHECK_THAT(static_cast<double>(buf[0]), WithinAbs(2.0 * 3.0 + 0.25, 1e-6));
+    buf = ones(32);
+    chain.process(buf.data(), 32);
+    CHECK(raw->resets_ == 1);
+
+    // Out-of-range groups are ignored.
+    chain.setGroupEnabled(9, false);
+    CHECK_FALSE(chain.groupEnabled(9));
+    chain.addSlot(std::make_unique<GainPedal>(1.0f), "e", true, 99);
+    CHECK(chain.slot(4).group == -1);
+}

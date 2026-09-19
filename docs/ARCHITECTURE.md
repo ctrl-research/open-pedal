@@ -45,8 +45,9 @@ delayed feedback for free. Knob values are linearly smoothed and pushed into bou
 every 16 samples. If `oversampling > 1`, the pedal wraps the loop in `juce::dsp::Oversampling`
 and reports its latency.
 
-**Chain** is a prepared series of `IPedal` slots with a bypass per slot. Disabled pedals that
-declare `tail_seconds` keep running on silence and their output is added to the dry signal until
+**Chain** is a prepared series of `IPedal` slots, each with its own switch and an optional group
+index; up to four group switches gate their members together. A slot is active when both are
+on. Inactive pedals that declare `tail_seconds` keep running on silence and their output is added to the dry signal until
 the tail expires, then they are reset. `process()` never allocates.
 
 **PedalCollection** holds every known `PedalDefinition` with an origin (`bundled`, `user`,
@@ -62,7 +63,7 @@ that `Chain` skips.
 ## Plugin (`src/plugin`)
 
 **Host parameters.** VST3 needs a fixed parameter list at construction, so the processor exposes
-8 slots × (1 bypass + 8 knobs). Each `SlotParameter` holds a normalised value and a pointer to
+4 group switches plus 8 slots × (1 bypass + 8 knobs). Each `SlotParameter` holds a normalised value and a pointer to
 the `ParamDescriptor` of whatever knob currently sits in that position. The descriptor supplies
 name, units, text formatting, step count for enums, and the real-unit mapping. When the board
 changes the pointers are re-targeted and the host is told parameter info changed.
@@ -84,8 +85,10 @@ or drops `pedals` according to the "include pedal definitions" choice.
 
 **Editor.** `PedalPanel` builds its controls from the slot's live descriptors: rotary sliders
 for floats and ints (attached to the host parameter so automation and the UI agree), combo
-boxes for enums, toggles for bools. Panels show resolution problems inline and an **Install**
-button for embedded pedals.
+boxes for enums, toggles for bools, and a group selector. Dragging a panel's header reorders
+the chain (`PedalStrip` is the drop target); removing a pedal asks for confirmation. Group
+buttons in the top bar toggle their members and rename on right-click. Panels show resolution
+problems inline and an **Install** button for embedded pedals.
 
 ## CLI (`src/cli/render.cpp`)
 

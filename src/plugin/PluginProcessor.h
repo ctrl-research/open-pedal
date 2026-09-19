@@ -68,6 +68,13 @@ public:
     void setSlotEnabled(int slot, bool enabled);
     void clearBoard();
 
+    // Groups. The board always carries kMaxGroups groups in memory (ids "g1".."g4"); export
+    // writes them only when a pedal uses one or a name was changed.
+    void setPedalGroup(int slot, int group); // group -1 removes the pedal from its group
+    void setGroupEnabled(int group, bool enabled);
+    void setGroupName(int group, const std::string& name);
+    bool isSlotActive(int slot) const;      // own switch and group switch
+
     // Replace the whole board (import). Missing pedals become bypass placeholders; see lastReport().
     void setBoard(Board newBoard);
 
@@ -93,6 +100,7 @@ public:
     // ---- Parameters -----------------------------------------------------------------------------
     SlotParameter* knobParam(int slot, int knob) const { return knobParams_[static_cast<std::size_t>(slot * kMaxKnobs + knob)]; }
     SlotBypassParameter* bypassParam(int slot) const { return bypassParams_[static_cast<std::size_t>(slot)]; }
+    GroupParameter* groupParam(int group) const { return groupParams_[static_cast<std::size_t>(group)]; }
 
     // Fires on the message thread after any board or pedal-collection change.
     juce::ChangeBroadcaster boardChanged;
@@ -106,6 +114,7 @@ private:
     void rebuildChain();
     void syncParamsFromBoard();
     void syncBoardFromParams();
+    void ensureGroups();
     void pruneGraveyard();
     void notifyBoardChanged();
 
@@ -118,6 +127,7 @@ private:
 
     std::vector<SlotParameter*> knobParams_;        // owned by AudioProcessor
     std::vector<SlotBypassParameter*> bypassParams_; // owned by AudioProcessor
+    std::vector<GroupParameter*> groupParams_;       // owned by AudioProcessor
 
     std::unique_ptr<Chain> chain_;                   // owner; only touched on the message thread
     std::atomic<Chain*> activeChain_{nullptr};       // read by the audio thread

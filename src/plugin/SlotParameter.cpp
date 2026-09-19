@@ -164,4 +164,22 @@ juce::String SlotBypassParameter::getName(int maximumStringLength) const
     return name.substring(0, maximumStringLength);
 }
 
+GroupParameter::GroupParameter(int group)
+    : juce::AudioParameterBool(juce::ParameterID{"group" + juce::String(group + 1) + "_on", 1},
+                               "Group " + juce::String(group + 1) + " On", true),
+      group_(group)
+{
+}
+
+bool GroupParameter::consumeChange()
+{
+    return changed_.exchange(false, std::memory_order_acq_rel);
+}
+
+juce::String GroupParameter::getName(int maximumStringLength) const
+{
+    const juce::String label = groupName_.isNotEmpty() ? groupName_ : "Group " + juce::String(group_ + 1);
+    return ("Group: " + label + " On").substring(0, maximumStringLength);
+}
+
 } // namespace openpedal

@@ -35,6 +35,7 @@ PedalInstance instanceFromJson(const json& j, std::size_t index)
     inst.pedalId = j["pedal"].get<std::string>();
     inst.versionReq = getOr<std::string>(j, "version", "*");
     inst.enabled = getOr<bool>(j, "enabled", true);
+    inst.group = getOr<std::string>(j, "group", "");
 
     if (j.contains("params")) {
         const auto& params = j["params"];
@@ -77,6 +78,32 @@ Board boardFromJson(const json& j)
             b.chain.push_back(instanceFromJson(chain[i], i));
     }
 
+    if (j.contains("groups") && !j["groups"].is_null()) {
+        const auto& groups = j["groups"];
+        if (!groups.is_array())
+            fail("board 'groups' must be an array");
+        for (std::size_t i = 0; i < groups.size(); ++i) {
+            const auto& g = groups[i];
+            const std::string where = "groups[" + std::to_string(i) + "]";
+            if (!g.is_object())
+                fail(where + " must be an object");
+            if (!g.contains("id") || !g["id"].is_string() || g["id"].get<std::string>().empty())
+                fail(where + " needs an 'id'");
+            PedalGroup group;
+            group.id = g["id"].get<std::string>();
+            group.name = getOr<std::string>(g, "name", group.id);
+            group.enabled = getOr<bool>(g, "enabled", true);
+            if (b.groupIndex(group.id) >= 0)
+                fail("duplicate group id '" + group.id + "'");
+            b.groups.push_back(std::move(group));
+        }
+        if (static_cast<int>(b.groups.size()) > kMaxGroups)
+            fail("a board can have at most " + std::to_string(kMaxGroups) + " groups");
+    }
+    for (std::size_t i = 0; i < b.chain.size(); ++i)
+        if (!b.chain[i].group.empty() && b.groupIndex(b.chain[i].group) < 0)
+            fail("chain[" + std::to_string(i) + "] references unknown group '" + b.chain[i].group + "'");
+
     if (j.contains("pedals") && !j["pedals"].is_null()) {
         const auto& pedals = j["pedals"];
         if (!pedals.is_object())
@@ -115,6 +142,8 @@ json boardToJson(const Board& board, bool includeEmbeddedPedals)
         p["pedal"] = inst.pedalId;
         p["version"] = inst.versionReq;
         p["enabled"] = inst.enabled;
+        if (!inst.group.empty())
+            p["group"] = inst.group;
         json params = json::object();
         for (const auto& [k, v] : inst.params)
             params[k] = v;
@@ -122,6 +151,13 @@ json boardToJson(const Board& board, bool includeEmbeddedPedals)
         chain.push_back(p);
     }
     j["chain"] = chain;
+
+    if (!board.groups.empty()) {
+        json groups = json::array();
+        for (const auto& g : board.groups)
+            groups.push_back(json{{"id", g.id}, {"name", g.name}, {"enabled", g.enabled}});
+        j["groups"] = groups;
+    }
 
     if (includeEmbeddedPedals && !board.embeddedPedals.empty()) {
         json pedals = json::object();

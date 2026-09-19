@@ -23,6 +23,13 @@ juce::Colour categoryColour(const std::string& category)
 
 } // namespace
 
+juce::Colour groupColour(int group)
+{
+    static const juce::Colour colours[] = {juce::Colour(0xffe3b341), juce::Colour(0xff3fb6a8),
+                                           juce::Colour(0xffd05fa2), juce::Colour(0xff7c8ce6)};
+    return group >= 0 && group < 4 ? colours[group] : juce::Colours::transparentBlack;
+}
+
 // ---- PedalPanel -----------------------------------------------------------------------------------
 
 PedalPanel::PedalPanel(OpenPedalProcessor& p, int slot) : processor_(p), slot_(slot)
@@ -71,9 +78,23 @@ PedalPanel::PedalPanel(OpenPedalProcessor& p, int slot) : processor_(p), slot_(s
     enable_.onClick = [this] { processor_.setSlotEnabled(slot_, enable_.getToggleState()); };
     addAndMakeVisible(enable_);
 
+    group_ = inst.group.empty() ? -1 : board.groupIndex(inst.group);
+    groupOff_ = group_ >= 0 && !processor_.groupParam(group_)->get();
+    if (groupOff_)
+        subtitle_ += "   (group off)";
+
     left_.onClick = [this] { processor_.movePedal(slot_, slot_ - 1); };
     right_.onClick = [this] { processor_.movePedal(slot_, slot_ + 1); };
-    remove_.onClick = [this] { processor_.removePedal(slot_); };
+    remove_.onClick = [this] { confirmRemove(); };
+    remove_.setTooltip("Remove this pedal from the board");
+
+    groupBox_.addItem("No group", 1);
+    for (int g = 0; g < kMaxGroups && g < static_cast<int>(board.groups.size()); ++g)
+        groupBox_.addItem(juce::String(board.groups[static_cast<std::size_t>(g)].name), g + 2);
+    groupBox_.setSelectedId(group_ + 2, juce::dontSendNotification);
+    groupBox_.onChange = [this] { processor_.setPedalGroup(slot_, groupBox_.getSelectedId() - 2); };
+    groupBox_.setTooltip("Pedals in a group switch on and off together");
+    addAndMakeVisible(groupBox_);
     left_.setEnabled(slot > 0);
     right_.setEnabled(slot < static_cast<int>(board.chain.size()) - 1);
     addAndMakeVisible(left_);
@@ -131,10 +152,14 @@ PedalPanel::PedalPanel(OpenPedalProcessor& p, int slot) : processor_(p), slot_(s
 void PedalPanel::paint(juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat().reduced(3.0f);
-    g.setColour(kPanel);
+    g.setColour(groupOff_ ? kPanel.darker(0.35f) : kPanel);
     g.fillRoundedRectangle(r, 8.0f);
     g.setColour(accent_);
     g.fillRoundedRectangle(r.removeFromTop(6.0f), 3.0f);
+    if (group_ >= 0) {
+        g.setColour(groupColour(group_));
+        g.fillRoundedRectangle(r.removeFromBottom(5.0f), 2.5f);
+    }
 
     auto header = getLocalBounds().reduced(8).removeFromTop(44);
     g.setColour(kText);
@@ -168,6 +193,8 @@ void PedalPanel::resized()
 
     if (install_.isVisible())
         install_.setBounds(r.removeFromBottom(28));
+    r.removeFromBottom(6);
+    groupBox_.setBounds(r.removeFromBottom(22));
 
     r.removeFromTop(8);
     const int cols = 2;
@@ -186,12 +213,91 @@ void PedalPanel::resized()
     }
 }
 
+void PedalPanel::mouseDown(const juce::MouseEvent& e)
+{
+    dragArmed_ = e.y < 50; // header area only, so knob gestures never start a drag
+}
+
+void PedalPanel::mouseDrag(const juce::MouseEvent& e)
+{
+    if (!dragArmed_ || e.getDistanceFromDragStart() < 6)
+        return;
+    dragArmed_ = false;
+    if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this)) {
+        auto image = createComponentSnapshot(getLocalBounds(), true, 0.85f);
+        container->startDragging(juce::var(slot_), this, juce::ScaledImage(image), true);
+    }
+}
+
+void PedalPanel::confirmRemove()
+{
+    juce::AlertWindow::showAsync(
+        juce::MessageBoxOptions()
+            .withIconType(juce::MessageBoxIconType::QuestionIcon)
+            .withTitle("Remove pedal?")
+            .withMessage("Remove \"" + title_ + "\" from the board? Its knob settings will be lost.")
+            .withButton("Remove")
+            .withButton("Cancel")
+            .withAssociatedComponent(this),
+        [this](int result) {
+            if (result == 1)
+                processor_.removePedal(slot_);
+        });
+}
+
+// ---- PedalStrip --------------------------------------------------------------------------------------
+
+void PedalStrip::paint(juce::Graphics& g)
+{
+    if (dropIndex_ < 0)
+        return;
+    const int x = dropIndex_ * (PedalPanel::kWidth + PedalPanel::kGap) - PedalPanel::kGap / 2;
+    g.setColour(juce::Colours::white.withAlpha(0.85f));
+    g.fillRoundedRectangle(static_cast<float>(x) - 2.0f, 4.0f, 4.0f, static_cast<float>(getHeight()) - 8.0f, 2.0f);
+}
+
+bool PedalStrip::isInterestedInDragSource(const SourceDetails& d)
+{
+    return d.description.isInt();
+}
+
+int PedalStrip::dropIndexFor(int x) const
+{
+    const int pitch = PedalPanel::kWidth + PedalPanel::kGap;
+    return juce::jlimit(0, numPanels, (x + pitch / 2) / pitch);
+}
+
+void PedalStrip::itemDragEnter(const SourceDetails& d) { itemDragMove(d); }
+
+void PedalStrip::itemDragMove(const SourceDetails& d)
+{
+    dropIndex_ = dropIndexFor(d.localPosition.x);
+    repaint();
+}
+
+void PedalStrip::itemDragExit(const SourceDetails&)
+{
+    dropIndex_ = -1;
+    repaint();
+}
+
+void PedalStrip::itemDropped(const SourceDetails& d)
+{
+    const int from = static_cast<int>(d.description);
+    int to = dropIndexFor(d.localPosition.x);
+    dropIndex_ = -1;
+    repaint();
+    if (to > from)
+        --to; // removing `from` shifts everything after it left by one
+    processor_.movePedal(from, to);
+}
+
 // ---- OpenPedalEditor ---------------------------------------------------------------------------------
 
 OpenPedalEditor::OpenPedalEditor(OpenPedalProcessor& p)
-    : AudioProcessorEditor(&p), processor_(p)
+    : AudioProcessorEditor(&p), processor_(p), strip_(p)
 {
-    setSize(900, 460);
+    setSize(900, 520);
     setResizable(true, true);
     setResizeLimits(600, 360, 4000, 2000);
 
@@ -212,6 +318,19 @@ OpenPedalEditor::OpenPedalEditor(OpenPedalProcessor& p)
     pedalsDirLabel_.setFont(juce::FontOptions(11.0f));
     pedalsDirLabel_.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(pedalsDirLabel_);
+
+    for (int g = 0; g < kMaxGroups; ++g) {
+        auto button = std::make_unique<GroupButton>();
+        button->setClickingTogglesState(true);
+        button->setColour(juce::TextButton::buttonOnColourId, groupColour(g));
+        button->setColour(juce::TextButton::textColourOnId, juce::Colours::black);
+        button->setColour(juce::TextButton::buttonColourId, kPanel.darker(0.4f));
+        button->setTooltip("Toggle every pedal in this group. Right-click to rename.");
+        button->onRightClick = [this, g] { showGroupMenu(g); };
+        groupAttachments_.push_back(std::make_unique<juce::ButtonParameterAttachment>(*processor_.groupParam(g), *button));
+        addAndMakeVisible(*button);
+        groupButtons_.push_back(std::move(button));
+    }
 
     viewport_.setViewedComponent(&strip_, false);
     viewport_.setScrollBarsShown(false, true);
@@ -245,6 +364,9 @@ void OpenPedalEditor::rebuild()
     boardName_.setText(juce::String(board.name), juce::dontSendNotification);
     pedalsDirLabel_.setText("pedals: " + juce::String(processor_.userPedalsDir().string()), juce::dontSendNotification);
 
+    for (int g = 0; g < kMaxGroups && g < static_cast<int>(board.groups.size()); ++g)
+        groupButtons_[static_cast<std::size_t>(g)]->setButtonText(juce::String(board.groups[static_cast<std::size_t>(g)].name));
+
     panels_.clear();
     strip_.removeAllChildren();
     for (int i = 0; i < static_cast<int>(board.chain.size()); ++i) {
@@ -252,6 +374,7 @@ void OpenPedalEditor::rebuild()
         strip_.addAndMakeVisible(*panel);
         panels_.push_back(std::move(panel));
     }
+    strip_.numPanels = static_cast<int>(panels_.size());
     addButton_.setEnabled(static_cast<int>(board.chain.size()) < kMaxSlots);
     refreshMessages();
     resized();
@@ -293,18 +416,59 @@ void OpenPedalEditor::resized()
     top.removeFromLeft(10);
     pedalsDirLabel_.setBounds(top);
 
+    r.removeFromTop(6);
+    auto groups = r.removeFromTop(26);
+    for (auto& b : groupButtons_) {
+        b->setBounds(groups.removeFromLeft(120));
+        groups.removeFromLeft(6);
+    }
+
     r.removeFromTop(8);
     messages_.setBounds(r.removeFromBottom(70));
     r.removeFromBottom(8);
     viewport_.setBounds(r);
 
-    const int stripWidth = juce::jmax(r.getWidth(), static_cast<int>(panels_.size()) * (PedalPanel::kWidth + 6));
+    const int stripWidth = juce::jmax(r.getWidth(), static_cast<int>(panels_.size()) * (PedalPanel::kWidth + PedalPanel::kGap));
     strip_.setBounds(0, 0, stripWidth, r.getHeight() - (viewport_.isHorizontalScrollBarShown() ? 10 : 0));
     int x = 0;
     for (auto& panel : panels_) {
         panel->setBounds(x, 0, PedalPanel::kWidth, strip_.getHeight());
-        x += PedalPanel::kWidth + 6;
+        x += PedalPanel::kWidth + PedalPanel::kGap;
     }
+}
+
+void OpenPedalEditor::showGroupMenu(int group)
+{
+    juce::PopupMenu menu;
+    menu.addItem(1, "Rename group...");
+    menu.addSeparator();
+    menu.addItem(2, "Remove all pedals from this group");
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(*groupButtons_[static_cast<std::size_t>(group)]),
+                       [this, group](int result) {
+                           if (result == 1) {
+                               renameGroup(group);
+                           } else if (result == 2) {
+                               const Board& board = processor_.board();
+                               const std::string id = board.groups[static_cast<std::size_t>(group)].id;
+                               for (int i = static_cast<int>(board.chain.size()) - 1; i >= 0; --i)
+                                   if (processor_.board().chain[static_cast<std::size_t>(i)].group == id)
+                                       processor_.setPedalGroup(i, -1);
+                           }
+                       });
+}
+
+void OpenPedalEditor::renameGroup(int group)
+{
+    const juce::String current = groupButtons_[static_cast<std::size_t>(group)]->getButtonText();
+    renameWindow_ = std::make_unique<juce::AlertWindow>("Rename group", "Name for this group:", juce::MessageBoxIconType::NoIcon);
+    renameWindow_->addTextEditor("name", current);
+    renameWindow_->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    renameWindow_->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    renameWindow_->enterModalState(true, juce::ModalCallbackFunction::create([this, group](int result) {
+        if (result == 1 && renameWindow_)
+            processor_.setGroupName(group, renameWindow_->getTextEditorContents("name").trim().toStdString());
+        renameWindow_.reset();
+    }), false);
 }
 
 void OpenPedalEditor::showAddPedalMenu()

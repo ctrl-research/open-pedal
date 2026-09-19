@@ -6,11 +6,14 @@
   "chain": [
     { "pedal": "openpedal.clean-boost", "version": "1.x", "enabled": true,
       "params": { "boost": 4, "low_cut": 60 } },
-    { "pedal": "openpedal.ts-drive", "version": "1.x", "enabled": true,
+    { "pedal": "openpedal.ts-drive", "version": "1.x", "enabled": true, "group": "g1",
       "params": { "drive": 25, "tone": 2000, "level": -6, "clip": "Gritty" } },
     { "pedal": "openpedal.chorus", "version": "1.x", "enabled": false,
       "params": { "rate": 0.6, "depth": 2.5, "mix": 0.4 } },
-    { "pedal": "openpedal.digital-delay", "version": "1.x", "enabled": true,
+    { "pedal": "openpedal.digital-delay", "version": "1.x", "enabled": true, "group": "g1",
       "params": { "time": 380, "feedback": 0.35, "damping": 4000, "mix": 0.25 } }
+  ],
+  "groups": [
+    { "id": "g1", "name": "Lead", "enabled": true }
   ]
 }
