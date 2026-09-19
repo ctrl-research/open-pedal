@@ -13,8 +13,11 @@ same data.
   "chain": [
     { "pedal": "openpedal.clean-boost", "version": "1.x", "enabled": true,
       "params": { "boost": 4, "low_cut": 60 } },
-    { "pedal": "openpedal.ts-drive", "version": "1.x", "enabled": true,
+    { "pedal": "openpedal.ts-drive", "version": "1.x", "enabled": true, "group": "g1",
       "params": { "drive": 25, "tone": 2000, "level": -6, "clip": "Gritty" } }
+  ],
+  "groups": [
+    { "id": "g1", "name": "Lead", "enabled": true }
   ],
   "pedals": {
     "openpedal.ts-drive": { "...": "full pedal definition, only present when exported with pedals" }
@@ -32,6 +35,8 @@ same data.
 | `chain[].version` | Requirement: `*`, `1.x`, `1.2.x`, or exact `1.2.3`. Default `*`. The newest installed pedal that satisfies it is used. |
 | `chain[].enabled` | Footswitch state. |
 | `chain[].params` | Knob id to value. Numbers are in the knob's real units; `enum` knobs use their label; `bool` knobs use `true`/`false`. Unknown knobs are ignored with a warning. |
+| `chain[].group` | Optional id of a group from `groups`. A pedal is only heard when its own `enabled` and its group's `enabled` are both true. |
+| `groups` | Optional, at most 4. Each has an `id` (referenced by pedals), a display `name`, and `enabled`. Members need not be adjacent in the chain. Group switches are exposed to the host as automatable parameters. |
 | `pedals` | Optional. Pedal id to full pedal definition, added by "Export (include pedal definitions)". |
 
 ## How pedals are resolved on import

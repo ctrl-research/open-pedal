@@ -198,7 +198,7 @@ int main(int argc, char** argv)
 
     int active = 0;
     for (int i = 0; i < chain->numSlots(); ++i)
-        if (chain->slot(i).pedal && chain->slot(i).enabled)
+        if (chain->slot(i).pedal && chain->isActive(i))
             ++active;
     std::printf("rendered %d samples at %.0f Hz through %d/%d active pedal(s), latency %d samples -> %s\n",
                 numSamples, reader->sampleRate, active, chain->numSlots(), chain->latencySamples(),

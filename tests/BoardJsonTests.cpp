@@ -72,3 +72,35 @@ TEST_CASE("malformed boards fail with readable errors")
     CHECK_THROWS_WITH(boardFromJsonString(R"({"input_gain_db":"loud"})"), Catch::Matchers::ContainsSubstring("wrong type"));
     CHECK_THROWS_WITH(boardFromJsonString(R"({"pedals":[]})"), Catch::Matchers::ContainsSubstring("'pedals' must be an object"));
 }
+
+TEST_CASE("groups round-trip and validate")
+{
+    Board b;
+    b.groups = {PedalGroup{.id = "g1", .name = "Lead", .enabled = false}, PedalGroup{.id = "g2", .name = "Ambient"}};
+    b.chain.push_back(PedalInstance{.pedalId = "a.b", .group = "g1"});
+    b.chain.push_back(PedalInstance{.pedalId = "c.d"});
+    b.chain.push_back(PedalInstance{.pedalId = "e.f", .enabled = false, .group = "g2"});
+
+    const json j = boardToJson(b, false);
+    CHECK(j["groups"].size() == 2);
+    CHECK(j["chain"][0]["group"] == "g1");
+    CHECK_FALSE(j["chain"][1].contains("group"));
+
+    const Board back = boardFromJson(j);
+    CHECK(back == b);
+    CHECK(back.groupIndex("g2") == 1);
+    CHECK(back.groupIndex("zz") == -1);
+    CHECK_FALSE(back.isActive(0)); // group off
+    CHECK(back.isActive(1));       // no group
+    CHECK_FALSE(back.isActive(2)); // pedal off
+
+    CHECK_THROWS_WITH(boardFromJsonString(R"({"chain":[{"pedal":"a.b","group":"nope"}]})"),
+                      Catch::Matchers::ContainsSubstring("unknown group 'nope'"));
+    CHECK_THROWS_WITH(boardFromJsonString(R"({"groups":[{"id":"x"},{"id":"x"}]})"),
+                      Catch::Matchers::ContainsSubstring("duplicate group id 'x'"));
+    CHECK_THROWS_WITH(boardFromJsonString(R"({"groups":[{"name":"no id"}]})"),
+                      Catch::Matchers::ContainsSubstring("needs an 'id'"));
+    CHECK_THROWS_WITH(boardFromJsonString(R"({"groups":[{"id":"1"},{"id":"2"},{"id":"3"},{"id":"4"},{"id":"5"}]})"),
+                      Catch::Matchers::ContainsSubstring("at most 4 groups"));
+    CHECK(boardFromJsonString(R"({"groups":[{"id":"only"}]})").groups[0].name == "only");
+}

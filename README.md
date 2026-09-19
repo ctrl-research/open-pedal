@@ -76,6 +76,13 @@ Errors name the offending node and list the valid options, for example:
 node 'clipper' param 'shape' has unknown option "warm" (options: tanh, soft, hard, asymmetric, fold, diode)
 ```
 
+## Groups
+
+Assign pedals to one of four groups from the selector on each panel. The group buttons above
+the board switch every member on or off together, even when the members are not next to each
+other in the chain. Group switches are automatable from the DAW. Right-click a group button to
+rename it.
+
 ## Sharing
 
 **Export** in the plugin writes the board as JSON, either to a file or to the clipboard. Tick

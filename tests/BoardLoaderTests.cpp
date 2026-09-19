@@ -83,3 +83,26 @@ TEST_CASE("a fully local board reports resolved and enum labels that do not exis
     CHECK(clean.allResolved());
     CHECK(clean.summary().empty());
 }
+
+TEST_CASE("buildChain applies groups from the board")
+{
+    PedalCollection c;
+    REQUIRE(c.add(gainPedal("t.local", 2.0), "user"));
+    Board b;
+    b.groups = {PedalGroup{.id = "g1", .name = "Lead", .enabled = false}, PedalGroup{.id = "g2", .name = "B"}};
+    b.chain.push_back(PedalInstance{.pedalId = "t.local", .group = "g1"});
+    b.chain.push_back(PedalInstance{.pedalId = "t.local", .group = "g2"});
+    b.chain.push_back(PedalInstance{.pedalId = "t.local"});
+    ResolutionReport report;
+    auto chain = buildChain(b, c, report);
+    CHECK(chain->slot(0).group == 0);
+    CHECK(chain->slot(1).group == 1);
+    CHECK(chain->slot(2).group == -1);
+    CHECK_FALSE(chain->groupEnabled(0));
+    CHECK_FALSE(chain->isActive(0));
+    CHECK(chain->isActive(1));
+    chain->prepare(48000, 8);
+    std::vector<float> buf(8, 1.0f);
+    chain->process(buf.data(), 8);
+    CHECK(buf[7] == 4.0f); // slots 1 and 2 only
+}

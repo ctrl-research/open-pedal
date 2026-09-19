@@ -66,6 +66,8 @@ std::unique_ptr<Chain> buildChain(const Board& board, const PedalCollection& col
 {
     auto chain = std::make_unique<Chain>();
     chain->setInputGainDb(board.inputGainDb);
+    for (std::size_t g = 0; g < board.groups.size() && g < static_cast<std::size_t>(Chain::kMaxGroups); ++g)
+        chain->setGroupEnabled(static_cast<int>(g), board.groups[g].enabled);
 
     for (std::size_t i = 0; i < board.chain.size(); ++i) {
         const auto& inst = board.chain[i];
@@ -92,7 +94,8 @@ std::unique_ptr<Chain> buildChain(const Board& board, const PedalCollection& col
         if (pedal)
             applyInstanceParams(*pedal, inst, item.warnings);
 
-        chain->addSlot(std::move(pedal), inst.pedalId, inst.enabled);
+        const int group = inst.group.empty() ? -1 : board.groupIndex(inst.group);
+        chain->addSlot(std::move(pedal), inst.pedalId, inst.enabled, group);
         report.items.push_back(std::move(item));
     }
     return chain;

@@ -41,6 +41,11 @@ OpenPedalProcessor::OpenPedalProcessor()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
+    for (int g = 0; g < kMaxGroups; ++g) {
+        auto* gp = new GroupParameter(g);
+        groupParams_.push_back(gp);
+        addParameter(gp);
+    }
     for (int s = 0; s < kMaxSlots; ++s) {
         auto* bypass = new SlotBypassParameter(s);
         bypassParams_.push_back(bypass);
@@ -58,6 +63,7 @@ OpenPedalProcessor::OpenPedalProcessor()
     scanUserPedalsDir(true);
 
     board_.name = "New Board";
+    ensureGroups();
     rebuildChain();
     syncParamsFromBoard();
     startTimer(500);
@@ -199,6 +205,9 @@ void OpenPedalProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // Push parameter changes into the chain. Values are converted through the descriptor of
     // the pedal currently in that slot; slots without a pedal ignore their parameters.
     if (chain) {
+        for (int g = 0; g < kMaxGroups; ++g)
+            if (groupParam(g)->consumeChange())
+                chain->setGroupEnabled(g, groupParam(g)->get());
         for (int s = 0; s < kMaxSlots && s < chain->numSlots(); ++s) {
             if (bypassParam(s)->consumeChange())
                 chain->setEnabled(s, !bypassParam(s)->get());
@@ -241,8 +250,20 @@ double OpenPedalProcessor::getTailLengthSeconds() const
 
 // ---- Parameter <-> board sync -------------------------------------------------------------------
 
+void OpenPedalProcessor::ensureGroups()
+{
+    for (int g = static_cast<int>(board_.groups.size()); g < kMaxGroups; ++g)
+        board_.groups.push_back(PedalGroup{.id = "g" + std::to_string(g + 1), .name = "Group " + std::to_string(g + 1)});
+    if (static_cast<int>(board_.groups.size()) > kMaxGroups)
+        board_.groups.resize(static_cast<std::size_t>(kMaxGroups));
+}
+
 void OpenPedalProcessor::syncParamsFromBoard()
 {
+    for (int g = 0; g < kMaxGroups && g < static_cast<int>(board_.groups.size()); ++g) {
+        groupParam(g)->setGroupName(juce::String(board_.groups[static_cast<std::size_t>(g)].name));
+        groupParam(g)->setValueNotifyingHost(board_.groups[static_cast<std::size_t>(g)].enabled ? 1.0f : 0.0f);
+    }
     for (int s = 0; s < kMaxSlots; ++s) {
         const bool hasSlot = chain_ && s < chain_->numSlots();
         IPedal* pedal = hasSlot ? chain_->slot(s).pedal.get() : nullptr;
@@ -271,6 +292,8 @@ void OpenPedalProcessor::syncBoardFromParams()
 {
     if (!chain_)
         return;
+    for (int g = 0; g < kMaxGroups && g < static_cast<int>(board_.groups.size()); ++g)
+        board_.groups[static_cast<std::size_t>(g)].enabled = groupParam(g)->get();
     for (int s = 0; s < kMaxSlots && s < static_cast<int>(board_.chain.size()); ++s) {
         auto& inst = board_.chain[static_cast<std::size_t>(s)];
         inst.enabled = !bypassParam(s)->get();
@@ -386,15 +409,72 @@ void OpenPedalProcessor::setBoard(Board newBoard)
     if (static_cast<int>(newBoard.chain.size()) > kMaxSlots)
         newBoard.chain.resize(static_cast<std::size_t>(kMaxSlots));
     board_ = std::move(newBoard);
+    ensureGroups();
     rebuildChain();
     syncParamsFromBoard();
     notifyBoardChanged();
+}
+
+void OpenPedalProcessor::setPedalGroup(int slot, int group)
+{
+    if (slot < 0 || slot >= static_cast<int>(board_.chain.size()))
+        return;
+    syncBoardFromParams();
+    ensureGroups();
+    board_.chain[static_cast<std::size_t>(slot)].group =
+        (group >= 0 && group < kMaxGroups) ? board_.groups[static_cast<std::size_t>(group)].id : std::string();
+    rebuildChain();
+    syncParamsFromBoard();
+    notifyBoardChanged();
+}
+
+void OpenPedalProcessor::setGroupEnabled(int group, bool enabled)
+{
+    if (group < 0 || group >= kMaxGroups)
+        return;
+    groupParam(group)->setValueNotifyingHost(enabled ? 1.0f : 0.0f);
+    ensureGroups();
+    board_.groups[static_cast<std::size_t>(group)].enabled = enabled;
+    notifyBoardChanged();
+}
+
+void OpenPedalProcessor::setGroupName(int group, const std::string& name)
+{
+    if (group < 0 || group >= kMaxGroups)
+        return;
+    ensureGroups();
+    board_.groups[static_cast<std::size_t>(group)].name = name.empty() ? "Group " + std::to_string(group + 1) : name;
+    groupParam(group)->setGroupName(juce::String(board_.groups[static_cast<std::size_t>(group)].name));
+    updateHostDisplay(ChangeDetails().withParameterInfoChanged(true));
+    notifyBoardChanged();
+}
+
+bool OpenPedalProcessor::isSlotActive(int slot) const
+{
+    if (slot < 0 || slot >= static_cast<int>(board_.chain.size()))
+        return false;
+    const auto& inst = board_.chain[static_cast<std::size_t>(slot)];
+    if (bypassParam(slot)->get())
+        return false;
+    const int g = inst.group.empty() ? -1 : board_.groupIndex(inst.group);
+    return g < 0 || groupParam(g)->get();
 }
 
 std::string OpenPedalProcessor::exportBoardJson(bool embedPedals)
 {
     syncBoardFromParams();
     Board out = board_;
+    // Drop groups nobody uses and nobody renamed so simple boards stay simple.
+    {
+        bool anyUsed = false;
+        for (const auto& inst : out.chain)
+            anyUsed = anyUsed || !inst.group.empty();
+        bool anyRenamed = false;
+        for (std::size_t g = 0; g < out.groups.size(); ++g)
+            anyRenamed = anyRenamed || out.groups[g].name != "Group " + std::to_string(g + 1) || !out.groups[g].enabled;
+        if (!anyUsed && !anyRenamed)
+            out.groups.clear();
+    }
     if (embedPedals) {
         for (const auto& inst : out.chain) {
             if (const auto* e = collection_.find(inst.pedalId, inst.versionReq))

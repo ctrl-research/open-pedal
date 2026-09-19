@@ -10,8 +10,31 @@
 
 namespace openpedal {
 
+juce::Colour groupColour(int group);
+
+// Toggle button whose right-click opens a menu instead of toggling.
+class GroupButton : public juce::TextButton {
+public:
+    std::function<void()> onRightClick;
+    void mouseDown(const juce::MouseEvent& e) override
+    {
+        if (!e.mods.isPopupMenu())
+            juce::TextButton::mouseDown(e);
+    }
+    void mouseUp(const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu()) {
+            if (onRightClick)
+                onRightClick();
+            return;
+        }
+        juce::TextButton::mouseUp(e);
+    }
+};
+
 // One pedal on the board: header, footswitch, knobs generated from the pedal's descriptor,
-// and move/remove controls. Unresolved slots show why and, if possible, an Install button.
+// group selector, and move/remove controls. Drag the header to reorder. Unresolved slots show
+// why and, if possible, an Install button.
 class PedalPanel : public juce::Component {
 public:
     PedalPanel(OpenPedalProcessor& p, int slot);
@@ -19,8 +42,12 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
 
+    int slot() const { return slot_; }
     static constexpr int kWidth = 190;
+    static constexpr int kGap = 6;
 
 private:
     struct KnobControl {
@@ -40,13 +67,41 @@ private:
     juce::StringArray problems_;
     bool resolved_ = false;
 
+    int group_ = -1;
+    bool groupOff_ = false;
+    bool dragArmed_ = false;
+
     juce::TextButton enable_{"ON"};
-    std::unique_ptr<juce::ButtonParameterAttachment> enableAttachment_;
     juce::TextButton left_{"<"}, right_{">"}, remove_{"x"}, install_{"Install pedal"};
+    juce::ComboBox groupBox_;
     std::vector<KnobControl> knobs_;
+
+    void confirmRemove();
 };
 
-class OpenPedalEditor : public juce::AudioProcessorEditor, private juce::ChangeListener {
+// Holds the pedal panels and accepts panel drops to reorder the chain.
+class PedalStrip : public juce::Component, public juce::DragAndDropTarget {
+public:
+    explicit PedalStrip(OpenPedalProcessor& p) : processor_(p) {}
+    void paint(juce::Graphics&) override;
+
+    bool isInterestedInDragSource(const SourceDetails&) override;
+    void itemDragEnter(const SourceDetails&) override;
+    void itemDragMove(const SourceDetails&) override;
+    void itemDragExit(const SourceDetails&) override;
+    void itemDropped(const SourceDetails&) override;
+
+    int numPanels = 0;
+
+private:
+    int dropIndexFor(int x) const;
+    OpenPedalProcessor& processor_;
+    int dropIndex_ = -1;
+};
+
+class OpenPedalEditor : public juce::AudioProcessorEditor,
+                        public juce::DragAndDropContainer,
+                        private juce::ChangeListener {
 public:
     explicit OpenPedalEditor(OpenPedalProcessor&);
     ~OpenPedalEditor() override;
@@ -73,9 +128,15 @@ private:
     juce::TextButton reloadButton_{"Reload pedals"};
     juce::Label pedalsDirLabel_;
 
+    void showGroupMenu(int group);
+    void renameGroup(int group);
+
     juce::Viewport viewport_;
-    juce::Component strip_;
+    PedalStrip strip_;
     std::vector<std::unique_ptr<PedalPanel>> panels_;
+    std::vector<std::unique_ptr<GroupButton>> groupButtons_;
+    std::vector<std::unique_ptr<juce::ButtonParameterAttachment>> groupAttachments_;
+    std::unique_ptr<juce::AlertWindow> renameWindow_;
 
     juce::TextEditor messages_;
     std::unique_ptr<juce::FileChooser> chooser_;

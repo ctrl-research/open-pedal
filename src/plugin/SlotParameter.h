@@ -74,4 +74,20 @@ private:
     juce::String pedalName_;
 };
 
+// Per-group on/off switch exposed to the host. On by default.
+class GroupParameter final : public juce::AudioParameterBool {
+public:
+    explicit GroupParameter(int group);
+    int group() const { return group_; }
+    bool consumeChange();
+    void setGroupName(const juce::String& name) { groupName_ = name; }
+    juce::String getName(int maximumStringLength) const override;
+
+private:
+    void valueChanged(bool) override { changed_.store(true, std::memory_order_release); }
+    const int group_;
+    std::atomic<bool> changed_{false};
+    juce::String groupName_;
+};
+
 } // namespace openpedal

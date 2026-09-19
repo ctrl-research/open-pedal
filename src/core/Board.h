@@ -10,6 +10,17 @@
 namespace openpedal {
 
 inline constexpr int kBoardSchemaVersion = 1;
+inline constexpr int kMaxGroups = 4;
+
+// A named switch that turns every member pedal on or off together. Members need not be
+// adjacent in the chain. A pedal belongs to at most one group.
+struct PedalGroup {
+    std::string id;   // stable id referenced by PedalInstance::group, e.g. "g1"
+    std::string name; // display name, e.g. "Lead"
+    bool enabled = true;
+
+    bool operator==(const PedalGroup&) const = default;
+};
 
 // One pedal placed on a board. Parameter values are kept as JSON so the model stays faithful
 // to the file: floats, ints, bools, and enum labels all round-trip without a descriptor.
@@ -17,6 +28,7 @@ struct PedalInstance {
     std::string pedalId;                          // "author.pedal-name"
     std::string versionReq = "*";                 // semver requirement such as "1.x" or "*"
     bool enabled = true;
+    std::string group;                            // PedalGroup::id, or empty for none
     std::map<std::string, nlohmann::json> params; // knob id -> real-unit value or enum label
 
     bool operator==(const PedalInstance&) const = default;
@@ -31,9 +43,29 @@ struct Board {
     std::string author;
     double inputGainDb = 0.0;
     std::vector<PedalInstance> chain;
+    std::vector<PedalGroup> groups;                       // at most kMaxGroups
     std::map<std::string, nlohmann::json> embeddedPedals; // pedal id -> pedal definition JSON
 
     bool operator==(const Board&) const = default;
+
+    // Index into `groups` for a group id, or -1.
+    int groupIndex(const std::string& id) const
+    {
+        for (std::size_t i = 0; i < groups.size(); ++i)
+            if (groups[i].id == id)
+                return static_cast<int>(i);
+        return -1;
+    }
+
+    // Whether a chain entry is effectively on: its own switch and its group's switch.
+    bool isActive(std::size_t slot) const
+    {
+        const auto& inst = chain[slot];
+        if (!inst.enabled)
+            return false;
+        const int g = inst.group.empty() ? -1 : groupIndex(inst.group);
+        return g < 0 || groups[static_cast<std::size_t>(g)].enabled;
+    }
 };
 
 struct BoardError : std::runtime_error {
