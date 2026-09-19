@@ -31,6 +31,11 @@ xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/OpenPedal.vst3
 Windows builds go in `C:\Program Files\Common Files\VST3\`, Linux builds in `~/.vst3/`.
 Rescan plugins in your DAW afterwards.
 
+## Releases
+
+Every merge to `main` publishes a release. The version bump comes from the merged PR's label:
+`major`, `minor`, or `patch` (the default when unlabeled).
+
 ## Build from source
 
 Requirements: a C++20 compiler (Xcode Command Line Tools on macOS), and

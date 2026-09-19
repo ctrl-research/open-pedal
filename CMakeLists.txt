@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.28)
 
+# Release builds pass the tag via -DOPENPEDAL_VERSION=X.Y.Z; local builds report 0.0.0.
+set(OPENPEDAL_VERSION "0.0.0" CACHE STRING "Version reported by the plugin and CLI (X.Y.Z)")
+
 project(OpenPedal
-  VERSION 0.1.0
+  VERSION ${OPENPEDAL_VERSION}
   DESCRIPTION "User-defined guitar pedals and pedalboards as a VST3 plugin"
   LANGUAGES C CXX)
 
